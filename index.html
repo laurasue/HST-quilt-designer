@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HST Quilt Designer</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;background:#f5f4f0;color:#1a1a1a;padding:1.5rem}
+h1{font-size:18px;font-weight:500;margin-bottom:1rem;color:#333}
+#app{display:flex;flex-direction:column;gap:10px}
+#toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:#fff;padding:10px 12px;border-radius:8px;border:0.5px solid #ddd}
+.swatch-btn{width:30px;height:30px;border:2px solid transparent;cursor:pointer;border-radius:4px;overflow:hidden;flex-shrink:0;position:relative}
+.swatch-btn canvas{display:block}
+.swatch-btn .badge{position:absolute;bottom:1px;right:2px;font-size:9px;font-weight:700;line-height:1;pointer-events:none}
+.sep{width:1px;height:26px;background:#ddd;margin:0 2px}
+#hst-palette{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.hst-item{display:flex;flex-direction:column;align-items:center;gap:3px;position:relative}
+.hst-item label{font-size:11px;color:#666}
+.hst-canvas{cursor:pointer;border:1px solid #ccc;border-radius:2px}
+.hst-canvas.selected-hst{border:2px solid #333}
+.hst-del{position:absolute;top:-5px;right:-5px;width:14px;height:14px;border-radius:50%;background:#f0f0f0;border:0.5px solid #ccc;cursor:pointer;font-size:10px;line-height:14px;text-align:center;color:#666;display:none}
+.hst-item:hover .hst-del{display:block}
+.hst-del:hover{background:#fee;color:#c00}
+#pair-preview{display:flex;align-items:center;gap:5px;padding:3px 8px;border:0.5px solid #ddd;border-radius:4px;background:#f9f9f9}
+#pair-preview span{font-size:11px;color:#888}
+#grid-area{display:flex;gap:6px;align-items:flex-start}
+#grid-wrap{overflow:auto;flex-shrink:0;background:#fff;border-radius:6px;border:0.5px solid #ddd;padding:4px}
+#grid-canvas{cursor:pointer;display:block}
+.edge-ctrl{display:flex;flex-direction:column;gap:4px;align-items:center}
+.edge-ctrl.horiz{flex-direction:row}
+.ec-btn{font-size:11px;padding:3px 7px;border-radius:4px;border:0.5px solid #ccc;background:#fff;cursor:pointer;color:#333;white-space:nowrap}
+.ec-btn:hover{background:#f0f0f0}
+.ec-btn.del{color:#c00}
+#controls{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.ctrl-btn{font-size:12px;padding:4px 10px;border-radius:4px;border:0.5px solid #ccc;background:#fff;cursor:pointer;color:#333}
+.ctrl-btn:hover{background:#f0f0f0}
+#help{font-size:12px;color:#888;line-height:1.7;background:#fff;padding:8px 12px;border-radius:6px;border:0.5px solid #ddd}
+</style>
+</head>
+<body>
+<h1>HST Quilt Designer</h1>
+<div id="app">
+  <div id="toolbar">
+    <span style="font-size:12px;color:#666">Fabrics:</span>
+    <div id="swatches" style="display:flex;gap:4px;flex-wrap:wrap"></div>
+    <div class="sep"></div>
+    <div id="pair-preview">
+      <canvas id="prev-a" width="20" height="20" style="border-radius:3px"></canvas>
+      <span>+</span>
+      <canvas id="prev-b" width="20" height="20" style="border-radius:3px"></canvas>
+      <canvas id="prev-hst" width="24" height="24" style="border-radius:2px;margin-left:2px"></canvas>
+    </div>
+    <button class="ctrl-btn" id="add-hst">+ Add HST</button>
+    <div class="sep"></div>
+    <span style="font-size:12px;color:#666">Blocks:</span>
+    <div id="hst-palette"></div>
+  </div>
+  <div id="controls">
+    <button class="ctrl-btn" id="btn-fill">Fill all</button>
+    <button class="ctrl-btn" id="btn-clear-grid">Clear grid</button>
+  </div>
+  <div id="grid-area">
+    <div style="display:flex;flex-direction:column;gap:6px;align-items:center">
+      <div class="edge-ctrl horiz">
+        <button class="ec-btn" data-edge="top" data-op="add">+ row top</button>
+        <button class="ec-btn del" data-edge="top" data-op="del">− row top</button>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <div class="edge-ctrl">
+          <button class="ec-btn" data-edge="left" data-op="add">+ col left</button>
+          <button class="ec-btn del" data-edge="left" data-op="del">− col left</button>
+        </div>
+        <div id="grid-wrap"><canvas id="grid-canvas"></canvas></div>
+        <div class="edge-ctrl">
+          <button class="ec-btn" data-edge="right" data-op="add">+ col right</button>
+          <button class="ec-btn del" data-edge="right" data-op="del">− col right</button>
+        </div>
+      </div>
+      <div class="edge-ctrl horiz">
+        <button class="ec-btn" data-edge="bot" data-op="add">+ row bottom</button>
+        <button class="ec-btn del" data-edge="bot" data-op="del">− row bottom</button>
+      </div>
+    </div>
+  </div>
+  <div id="help">
+    <b>Click</b> or <b>drag</b> to paint &nbsp;|&nbsp; <b>Shift+click/drag</b> to erase &nbsp;|&nbsp; <b>Right-click</b> to rotate in place &nbsp;|&nbsp; <b>Q / E</b> rotate selected block CCW / CW &nbsp;|&nbsp; Hover a block to reveal ×
+  </div>
+</div>
+<script>
+const CELL=60;
+const grays=['#ffffff','#e8e8e8','#cfcfcf','#b6b6b6','#9d9d9d','#848484','#6b6b6b','#525252','#393939','#1a1a1a'];
+const lblClr=['#111','#111','#111','#111','#111','#111','#fff','#fff','#fff','#fff'];
+
+let selectedHST=0,isDragging=false;
+let cols=12,rows=12;
+let gridData=makeGrid(rows,cols);
+let hsts=[{a:0,b:9,rot:0},{a:2,b:7,rot:0},{a:4,b:5,rot:0}];
+let pairA=0,pairB=9;
+
+function makeGrid(r,c){return Array.from({length:r},()=>Array(c).fill(null));}
+
+function resizeGrid(edge,op){
+  if(op==='add'){
+    if(edge==='top'){gridData.unshift(Array(cols).fill(null));rows++;}
+    else if(edge==='bot'){gridData.push(Array(cols).fill(null));rows++;}
+    else if(edge==='left'){gridData.forEach(r=>r.unshift(null));cols++;}
+    else if(edge==='right'){gridData.forEach(r=>r.push(null));cols++;}
+  } else {
+    if(rows<=2&&(edge==='top'||edge==='bot'))return;
+    if(cols<=2&&(edge==='left'||edge==='right'))return;
+    if(edge==='top'){gridData.shift();rows--;}
+    else if(edge==='bot'){gridData.pop();rows--;}
+    else if(edge==='left'){gridData.forEach(r=>r.shift());cols--;}
+    else if(edge==='right'){gridData.forEach(r=>r.pop());cols--;}
+  }
+  renderGrid();
+}
+
+function drawSwatch(canvas,fi,sz=28){
+  canvas.width=sz;canvas.height=sz;
+  const ctx=canvas.getContext('2d');
+  ctx.fillStyle=grays[fi];ctx.fillRect(0,0,sz,sz);
+  ctx.fillStyle=lblClr[fi];
+  ctx.font=`bold ${Math.round(sz*.45)}px sans-serif`;
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText(fi+1,sz/2,sz/2);
+}
+
+function paintHST(ctx,hst,x,y,sz){
+  const rot=hst.rot||0;
+  ctx.save();
+  ctx.translate(x+sz/2,y+sz/2);ctx.rotate(rot*Math.PI/2);ctx.translate(-sz/2,-sz/2);
+  ctx.fillStyle=grays[hst.a];
+  ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(sz,0);ctx.lineTo(0,sz);ctx.closePath();ctx.fill();
+  ctx.fillStyle=grays[hst.b];
+  ctx.beginPath();ctx.moveTo(sz,0);ctx.lineTo(sz,sz);ctx.lineTo(0,sz);ctx.closePath();ctx.fill();
+  ctx.restore();
+  ctx.strokeStyle='rgba(128,128,128,0.25)';ctx.lineWidth=0.5;
+  ctx.strokeRect(x+.25,y+.25,sz-.5,sz-.5);
+}
+
+function drawHSTcanvas(canvas,hst,sz=40){
+  canvas.width=sz;canvas.height=sz;
+  paintHST(canvas.getContext('2d'),hst,0,0,sz);
+}
+
+function renderGrid(){
+  const gc=document.getElementById('grid-canvas');
+  gc.width=cols*CELL;gc.height=rows*CELL;
+  const ctx=gc.getContext('2d');
+  ctx.clearRect(0,0,gc.width,gc.height);
+  for(let r=0;r<rows;r++) for(let c=0;c<cols;c++){
+    const x=c*CELL,y=r*CELL,cell=gridData[r][c];
+    if(cell)paintHST(ctx,cell,x,y,CELL);
+    else{
+      ctx.fillStyle='rgba(128,128,128,0.05)';ctx.fillRect(x,y,CELL,CELL);
+      ctx.strokeStyle='rgba(128,128,128,0.2)';ctx.lineWidth=0.5;ctx.strokeRect(x+.25,y+.25,CELL-.5,CELL-.5);
+    }
+  }
+}
+
+function updatePreview(){
+  drawSwatch(document.getElementById('prev-a'),pairA,20);
+  drawSwatch(document.getElementById('prev-b'),pairB,20);
+  drawHSTcanvas(document.getElementById('prev-hst'),{a:pairA,b:pairB,rot:0},24);
+}
+
+function buildSwatches(){
+  const el=document.getElementById('swatches');el.innerHTML='';
+  for(let i=0;i<10;i++){
+    const btn=document.createElement('button');
+    btn.className='swatch-btn';
+    const c=document.createElement('canvas');drawSwatch(c,i);btn.appendChild(c);
+    if(i===pairA||i===pairB){
+      const badge=document.createElement('div');
+      badge.className='badge';
+      badge.style.color=lblClr[i];
+      badge.textContent=i===pairA?'A':'B';
+      btn.appendChild(badge);
+      btn.style.borderColor=i===pairA?'#4a9eff':'#ff7b4a';
+    }
+    btn.onclick=()=>{pairB=pairA;pairA=i;buildSwatches();updatePreview();};
+    el.appendChild(btn);
+  }
+}
+
+function buildPalette(){
+  const p=document.getElementById('hst-palette');p.innerHTML='';
+  if(selectedHST>=hsts.length)selectedHST=Math.max(0,hsts.length-1);
+  hsts.forEach((h,i)=>{
+    const wrap=document.createElement('div');wrap.className='hst-item';
+    const c=document.createElement('canvas');
+    c.className='hst-canvas'+(i===selectedHST?' selected-hst':'');
+    drawHSTcanvas(c,h,40);
+    c.onclick=()=>{selectedHST=i;buildPalette();};
+    const lbl=document.createElement('label');lbl.textContent=`${h.a+1}/${h.b+1}`;
+    const del=document.createElement('div');del.className='hst-del';del.textContent='×';
+    del.onclick=(e)=>{
+      e.stopPropagation();
+      if(hsts.length<=1)return;
+      hsts.splice(i,1);
+      if(selectedHST>=hsts.length)selectedHST=hsts.length-1;
+      buildPalette();
+    };
+    wrap.appendChild(c);wrap.appendChild(lbl);wrap.appendChild(del);p.appendChild(wrap);
+  });
+}
+
+function cellAt(e){
+  const gc=document.getElementById('grid-canvas');
+  const rect=gc.getBoundingClientRect();
+  const c=Math.floor((e.clientX-rect.left)/CELL),r=Math.floor((e.clientY-rect.top)/CELL);
+  return(r>=0&&r<rows&&c>=0&&c<cols)?{r,c}:null;
+}
+
+function place(r,c){
+  const h=hsts[selectedHST];
+  gridData[r][c]={a:h.a,b:h.b,rot:h.rot};
+  renderGrid();
+}
+
+const gc=document.getElementById('grid-canvas');
+gc.addEventListener('mousedown',e=>{
+  if(e.button===2){e.preventDefault();const p=cellAt(e);if(p&&gridData[p.r][p.c])gridData[p.r][p.c].rot=(gridData[p.r][p.c].rot+1)%4,renderGrid();return;}
+  isDragging=true;const p=cellAt(e);if(p){if(e.shiftKey){gridData[p.r][p.c]=null;renderGrid();}else place(p.r,p.c);}
+});
+gc.addEventListener('mousemove',e=>{if(isDragging){const p=cellAt(e);if(p){if(e.shiftKey){gridData[p.r][p.c]=null;renderGrid();}else place(p.r,p.c);}}});
+gc.addEventListener('mouseup',()=>isDragging=false);
+gc.addEventListener('contextmenu',e=>e.preventDefault());
+
+document.addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT')return;
+  if(e.key==='q'||e.key==='Q'){hsts[selectedHST].rot=((hsts[selectedHST].rot-1)+4)%4;buildPalette();}
+  if(e.key==='e'||e.key==='E'){hsts[selectedHST].rot=(hsts[selectedHST].rot+1)%4;buildPalette();}
+});
+
+document.querySelectorAll('.ec-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>resizeGrid(btn.dataset.edge,btn.dataset.op));
+});
+
+document.getElementById('add-hst').onclick=()=>{
+  if(hsts.length>=12)return;
+  hsts.push({a:pairA,b:pairB,rot:0});
+  selectedHST=hsts.length-1;
+  buildPalette();
+};
+document.getElementById('btn-fill').onclick=()=>{for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)place(r,c);};
+document.getElementById('btn-clear-grid').onclick=()=>{gridData=makeGrid(rows,cols);renderGrid();};
+
+updatePreview();buildSwatches();buildPalette();renderGrid();
+</script>
+</body>
+</html>
